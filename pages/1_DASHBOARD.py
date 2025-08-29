@@ -24,7 +24,6 @@ labour_charges = cursor.fetchone()[0] or 0.0
 cursor.execute("SELECT SUM(quantity) FROM daily_log where item_name='TILE'")
 total_tiles = cursor.fetchone()[0] or 0.0
 
-
 cursor.execute("SELECT SUM(amount) FROM labour_payments")
 total_paid = cursor.fetchone()[0] or 0.0
 
@@ -37,48 +36,65 @@ material_paid = cursor.fetchone()[0] or 0.0
 labour_balance = labour_charges - total_paid
 material_balance = material_expense - material_paid
 total_expense = material_expense + labour_charges
-total_paid_all = total_paid+material_paid
-# ------------------- Dashboard Layout -------------------
+total_paid_all = total_paid + material_paid
+
+# ------------------- Card Style -------------------
+card_style = """
+    <div style="
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+        text-align: center;
+        margin: 5px;
+    ">
+        <h4 style="margin-bottom: 8px;">{title}</h4>
+        <h2 style="color:#2E86C1;">{value}</h2>
+    </div>
+"""
+
 st.markdown("### 📊 Summary Overview")
 
-# Labour Section
-with st.container():
-    st.markdown("#### 👷Tile Production")
-    col1, col2 = st.columns(2)
-    col1.metric("Total Tiles Produced", f"{total_tiles}")
-    # col2.metric("Paid to Labour", f"₹ {total_paid:,.2f}")
-    col2.metric("Paid to Labour", "test")
-
+# --- Tile Production ---
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown(card_style.format(title="Total Tiles Produced", value=f"{total_tiles}"), unsafe_allow_html=True)
+with col2:
+    st.markdown(card_style.format(title="Paid to Labour", value=f"₹ {total_paid:,.2f}"), unsafe_allow_html=True)
 
 st.markdown("---")
 
-# Labour Section
-with st.container():
-    st.markdown("#### 👷 Labour Summary")
-    col3, col4, col5 = st.columns(3)
-    col3.metric("Total Labour Charges", f"₹ {labour_charges:,.2f}")
-    col4.metric("Paid to Labour", f"₹ {total_paid:,.2f}")
-    col5.metric("Outstanding Balance", f"₹ {labour_balance:,.2f}")
+# --- Labour Summary ---
+st.markdown("#### 👷 Labour Summary")
+col3, col4, col5 = st.columns(3)
+with col3:
+    st.markdown(card_style.format(title="Total Labour Charges", value=f"₹ {labour_charges:,.2f}"), unsafe_allow_html=True)
+with col4:
+    st.markdown(card_style.format(title="Paid to Labour", value=f"₹ {total_paid:,.2f}"), unsafe_allow_html=True)
+with col5:
+    st.markdown(card_style.format(title="Outstanding Balance", value=f"₹ {labour_balance:,.2f}"), unsafe_allow_html=True)
 
 st.markdown("---")
 
-
-# Material Section
-with st.container():
-    st.markdown("#### 🧱 Material Summary")
-    col6, col7, col8 = st.columns(3)
-    col6.metric("Material Expense", f"₹ {material_expense:,.2f}")
-    col7.metric("Paid for Materials", f"₹ {material_paid:,.2f}")
-    col8.metric("Outstanding Balance", f"₹ {material_balance:,.2f}")
+# --- Material Summary ---
+st.markdown("#### 🧱 Material Summary")
+col6, col7, col8 = st.columns(3)
+with col6:
+    st.markdown(card_style.format(title="Material Expense", value=f"₹ {material_expense:,.2f}"), unsafe_allow_html=True)
+with col7:
+    st.markdown(card_style.format(title="Paid for Materials", value=f"₹ {material_paid:,.2f}"), unsafe_allow_html=True)
+with col8:
+    st.markdown(card_style.format(title="Outstanding Balance", value=f"₹ {material_balance:,.2f}"), unsafe_allow_html=True)
 
 st.markdown("---")
 
-# Total Section
-with st.container():
-    st.markdown("#### 📦 Overall Summary")
-    col9, col10= st.columns(2)
-    col9.metric("💰 Total Expense", f"₹ {total_expense:,.2f}")
-    col10.metric("🏷️ Total Paid", f"₹ {total_paid_all:,.2f} ")
+# --- Overall Summary ---
+st.markdown("#### 📦 Overall Summary")
+col9, col10 = st.columns(2)
+with col9:
+    st.markdown(card_style.format(title="💰 Total Expense", value=f"₹ {total_expense:,.2f}"), unsafe_allow_html=True)
+with col10:
+    st.markdown(card_style.format(title="🏷️ Total Paid", value=f"₹ {total_paid_all:,.2f}"), unsafe_allow_html=True)
 
 st.markdown("---")
 
