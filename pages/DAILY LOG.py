@@ -5,98 +5,96 @@ from db import get_conn
 st.set_page_config(page_title="Daily Tiles Log", layout="wide")
 st.title("🧱 Daily Tiles Log")
 
+# --- DB Connection ---
 conn = get_conn()
 cursor = conn.cursor()
 
-# Fetch config for dropdown items
+# --- Fetch config ---
 df_config = pd.read_sql("SELECT * FROM config", conn)
-items = [row['name'] for index, row in df_config.iterrows()]
+
+# Define main items
+main_items = ["TILE", "LOADING", "POT"]
 
 # --- Add new log ---
 st.subheader("➕ Add New Daily Log")
-col1, col2, col3 = st.columns([2, 1, 2])
 
-with col1:
-    selected_item = st.selectbox("Select Item", items)
-with col2:
-    quantity = st.number_input("Qt Produced/Items loaded", min_value=0, value=0)
-with col3:
-    if st.button("Add Log"):
-        if quantity <= 0:
-            st.error("❌ Quantity must be greater than 0")
+selected_item = st.selectbox("Select Item", main_items)
+
+if selected_item == "TILE":
+    tile_type = st.selectbox("Tile Type", ["1x1", "INTERLOCK"])
+
+    if tile_type == "1x1":
+        # Fetch rate from config
+        row = df_config[(df_config["category"] == "Tile") & (df_config["option_name"] == "1x1")]
+        if not row.empty:
+            unit_charge = row["value"].values[0]
+            qty = st.number_input("Quantity Produced (1x1)", min_value=0, step=1)
+            if st.button("Add 1x1 Log"):
+                if qty > 0:
+                    total = qty * unit_charge
+                    cursor.execute(
+                        "INSERT INTO daily_log(date, item_name, quantity, labour_charges) VALUES(CURRENT_DATE, ?, ?, ?)",
+                        ("Tile 1x1", qty, total)
+                    )
+                    conn.commit()
+                    st.success(f"✅ Added 1x1 | Qty {qty} | ₹{total:,.2f}")
         else:
-            cursor.execute("SELECT value FROM config WHERE name=?", (selected_item,))
-            unit_charge = cursor.fetchone()[0]
-            total_charge = quantity * unit_charge
-            cursor.execute(
-                "INSERT INTO daily_log(date, item_name, quantity, labour_charges) VALUES(CURRENT_DATE, ?, ?, ?)",
-                (selected_item, quantity, total_charge)
-            )
-            conn.commit()
-            st.success(f"✅ Log added! Total labour charges: ₹ {total_charge:,.2f}")
+            st.error("⚠️ No rate found in config for Tile 1x1")
+
+    elif tile_type == "INTERLOCK":
+        # Fetch available interlock sizes from config dynamically
+        interlock_sizes = df_config[df_config["category"] == "Interlock"]
+
+        if interlock_sizes.empty:
+            st.warning("⚠️ No Interlock sizes found in config. Add them first.")
+        else:
+            st.write("### Enter Quantities for Interlock Sizes")
+            size_qty_map = {}
+            for _, row in interlock_sizes.iterrows():
+                size = row["option_name"]
+                rate = row["value"]
+                qty = st.number_input(f"{size} (Rate ₹{rate})", min_value=0, step=1, key=f"qty_{size}")
+                size_qty_map[size] = (qty, rate)
+
+            if st.button("Add Interlock Logs"):
+                any_added = False
+                for size, (qty, rate) in size_qty_map.items():
+                    if qty > 0:
+                        total = qty * rate
+                        cursor.execute(
+                            "INSERT INTO daily_log(date, item_name, quantity, labour_charges) VALUES(CURRENT_DATE, ?, ?, ?)",
+                            (f"Interlock {size}", qty, total)
+                        )
+                        any_added = True
+                if any_added:
+                    conn.commit()
+                    st.success("✅ Interlock logs added successfully!")
+                else:
+                    st.info("No quantities entered.")
+
+elif selected_item in ["LOADING", "POT"]:
+    # Fetch rate from config
+    row = df_config[df_config["category"].str.upper() == selected_item]
+    if not row.empty:
+        rate = row["value"].values[0]
+        qty = st.number_input(f"Quantity for {selected_item}", min_value=0, step=1)
+        if st.button(f"Add {selected_item} Log"):
+            if qty > 0:
+                total = qty * rate
+                cursor.execute(
+                    "INSERT INTO daily_log(date, item_name, quantity, labour_charges) VALUES(CURRENT_DATE, ?, ?, ?)",
+                    (selected_item, qty, total)
+                )
+                conn.commit()
+                st.success(f"✅ Added {selected_item} | Qty {qty} | ₹{total:,.2f}")
+    else:
+        st.error(f"⚠️ No rate found in config for {selected_item}")
 
 st.markdown("---")
 
-# --- Summary cards ---
-cursor.execute("""
-    SELECT SUM(quantity), SUM(labour_charges)
-    FROM daily_log
-    WHERE date = CURRENT_DATE
-    AND item_name = 'TILE'
-""")
-total_qty, total_charges = cursor.fetchone()
-total_qty = total_qty or 0
-total_charges = total_charges or 0.0
-
-# cursor.execute("SELECT SUM(amount) FROM labour_payments")
-# total_paid = cursor.fetchone()[0] or 0.0
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Tiles Today", total_qty)
-col2.metric("Total Labour Charges Today", f"₹ {total_charges:,.2f}")
-# col3.metric("💰 Total Paid (All-time)", f"₹ {total_paid:,.2f}")
-
-st.markdown("---")
-
-# --- Show logs table ---
+# --- Show Logs Table ---
 st.subheader("📋 Daily Logs Table")
 df_logs = pd.read_sql("SELECT * FROM daily_log ORDER BY date DESC", conn)
 st.dataframe(df_logs, use_container_width=True)
-
-
-
-# --- Edit / Delete functionality inside Expander ---
-with st.expander("✏️ Edit or Delete Entry", expanded=False):
-    log_ids = df_logs['id'].tolist()
-    if log_ids:
-        selected_id = st.selectbox("Select entry ID to edit/delete", log_ids)
-
-        if selected_id:
-            selected_row = df_logs[df_logs['id'] == selected_id].iloc[0]
-            edit_item = st.selectbox("Item", items, index=items.index(selected_row['item_name']))
-            edit_qty = st.number_input("Quantity", min_value=0, value=int(selected_row['quantity']), key='edit_qty')
-
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Update Entry"):
-                    if edit_qty <= 0:
-                        st.error("❌ Quantity must be greater than 0")
-                    else:
-                        cursor.execute("SELECT value FROM config WHERE name=?", (edit_item,))
-                        unit_charge = cursor.fetchone()[0]
-                        total_charge = edit_qty * unit_charge
-                        cursor.execute(
-                            "UPDATE daily_log SET item_name=?, quantity=?, labour_charges=? WHERE id=?",
-                            (edit_item, edit_qty, total_charge, selected_id)
-                        )
-                        conn.commit()
-                        st.success("✅ Entry updated!")
-
-            with col2:
-                if st.button("Delete Entry"):
-                    cursor.execute("DELETE FROM daily_log WHERE id=?", (selected_id,))
-                    conn.commit()
-                    st.warning("🗑️ Entry deleted!")
-
 
 conn.close()

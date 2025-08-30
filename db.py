@@ -25,10 +25,12 @@ def init_db():
     # Config table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS config (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE,
-        value REAL
-    )
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,      -- e.g. "Tile", "Interlock"
+    option_name TEXT NOT NULL,   -- e.g. "1x1", "2x2", "60mm", "80mm"
+    value REAL,
+    UNIQUE(category, option_name)
+)
     ''')
 
     # Labour payments table
@@ -50,6 +52,15 @@ def init_db():
         details TEXT
     )
     ''')
+    # Vendor-Materials table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS vendor_materials (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vendor_id INTEGER,
+        material_name TEXT,
+        FOREIGN KEY(vendor_id) REFERENCES vendors(id)
+    )
+    ''')
 
     # Materials Procurement table
     cursor.execute('''
@@ -57,12 +68,15 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT,
         material_type TEXT,
+        quantity INTEGER,
         unit TEXT,
-        price REAL,
+        price_per_unit REAL,
+        total_price REAL,
         vendor_id INTEGER,
         FOREIGN KEY(vendor_id) REFERENCES vendors(id)
     )
     ''')
+
     
     # Material payments table (linked to vendor_id)
     cursor.execute('''
@@ -90,12 +104,22 @@ def init_db():
     )
     ''')
 
-    # Default config values
-    cursor.execute("INSERT OR IGNORE INTO config(name, value) VALUES('TILE', 5)")
-    cursor.execute("INSERT OR IGNORE INTO config(name, value) VALUES('POT', 10)")
-    cursor.execute("INSERT OR IGNORE INTO config(name, value) VALUES('LOADING', 0.25)")
-    cursor.execute("INSERT OR IGNORE INTO config(name, value) VALUES('1x1', 25)")
+    # ---- Default config values ----
+    default_configs = [
+        ("General", "LOADING", 0.25),
+        ("Tile", "1x1", 25),
+        ("Tile", "2x2", 40),
+        ("Interlock", "60mm", 20),
+        ("Interlock", "80mm", 25),
+        ("Pot", "Standard", 10)
+    ]
 
+    for category, option, value in default_configs:
+        cursor.execute(
+            "INSERT OR IGNORE INTO config (category, option_name, value) VALUES (?, ?, ?)",
+            (category, option, value)
+        )
 
     conn.commit()
     conn.close()
+

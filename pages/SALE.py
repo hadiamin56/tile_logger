@@ -19,6 +19,13 @@ df_config = pd.read_sql("SELECT name, value FROM config", conn)
 tile_types = df_config[~df_config["name"].isin(["TILE", "LOADING", "POT"])]
 tile_options = tile_types["name"].tolist()
 
+# --- Safe rerun helper (works for both old and new Streamlit versions) ---
+def safe_rerun():
+    if hasattr(st, "rerun"):  # Streamlit >=1.30
+        st.rerun()
+    elif hasattr(st, "experimental_rerun"):  # Streamlit <1.30
+        st.experimental_rerun()
+
 # --- Customer Billing Form ---
 with st.expander("🧾 Customer Billing"):
     customer_name = st.text_input("Customer Name")
@@ -55,7 +62,7 @@ with st.expander("🧾 Customer Billing"):
             )
             conn.commit()
             st.success(f"✅ Sale added for {customer_name} | Amount: ₹ {total_amount:.2f}")
-            st.experimental_rerun()  # refresh instantly
+            safe_rerun()  # <--- safe refresh
 
 # --- Helper: Generate professional invoice PDF ---
 def generate_invoice_pdf(row):
