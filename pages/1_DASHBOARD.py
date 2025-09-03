@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from db import get_conn
-import plotly.express as px
+# import plotly.express as px
 
 st.set_page_config(page_title="Tiles Factory Dashboard", layout="wide")
 st.title("🏭 Tiles Factory Dashboard")
@@ -92,14 +92,14 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ------------------- CHART -------------------
-if not df_tiles.empty:
-    st.subheader("📊 Tiles Production vs Sales")
-    df_chart = pd.DataFrame({
-        "Metric": ["Produced", "Sold"],
-        "Quantity": [total_tiles_produced, total_tiles_sold]
-    })
-    fig = px.bar(df_chart, x="Metric", y="Quantity", color="Metric", text="Quantity", title="Tiles Production vs Sales")
-    st.plotly_chart(fig, use_container_width=True)
+# if not df_tiles.empty:
+#     st.subheader("📊 Tiles Production vs Sales")
+#     df_chart = pd.DataFrame({
+#         "Metric": ["Produced", "Sold"],
+#         "Quantity": [total_tiles_produced, total_tiles_sold]
+#     })
+#     fig = px.bar(df_chart, x="Metric", y="Quantity", color="Metric", text="Quantity", title="Tiles Production vs Sales")
+#     st.plotly_chart(fig, use_container_width=True)
 
 # ------------------- TILE DETAILS -------------------
 if not df_tiles.empty:
