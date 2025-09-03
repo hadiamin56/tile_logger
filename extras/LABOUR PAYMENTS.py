@@ -5,16 +5,19 @@ from db import get_conn
 st.set_page_config(page_title="Labour Payments Dashboard", layout="wide")
 st.title("🧾 Labour Payments Dashboard")
 
+# --- DB Connection ---
 conn = get_conn()
 cursor = conn.cursor()
 
-# --- Calculate totals ---
-cursor.execute("SELECT SUM(labour_charges) FROM daily_log")
+# --- Calculate totals from daily_log ---
+cursor.execute("SELECT SUM(labour_charge) FROM daily_log")
 total_charges = cursor.fetchone()[0] or 0.0   # includes loading also
 
+# --- Calculate total paid ---
 cursor.execute("SELECT SUM(amount) FROM labour_payments")
 total_paid = cursor.fetchone()[0] or 0.0      # only real cash payments
 
+# --- Balance ---
 balance = total_charges - total_paid
 
 # --- Summary cards ---
@@ -26,7 +29,7 @@ col3.metric("⚖️ Balance", f"₹ {balance:,.2f}")
 st.markdown("---")
 
 # --- Add new payment form ---
-with st.expander("Add New Payment"):
+with st.expander("➕ Add New Payment"):
     payment_date = st.date_input("Payment Date")
     amount = st.number_input("Amount Paid", min_value=0.0, value=0.0)
     purpose = st.text_input("Purpose (optional)")
@@ -37,7 +40,7 @@ with st.expander("Add New Payment"):
             (str(payment_date), amount, purpose)
         )
         conn.commit()
-        st.success(f"Payment of ₹ {amount:,.2f} added!")
+        st.success(f"✅ Payment of ₹ {amount:,.2f} added!")
 
 st.markdown("---")
 

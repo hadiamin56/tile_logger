@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from db import get_conn
+import plotly.express as px
 
 st.set_page_config(page_title="Tiles Factory Dashboard", layout="wide")
 st.title("🏭 Tiles Factory Dashboard")
@@ -9,16 +10,8 @@ st.title("🏭 Tiles Factory Dashboard")
 conn = get_conn()
 cursor = conn.cursor()
 
-# --- Fetch Config ---
-df_config = pd.read_sql("SELECT * FROM config", conn)
-config_dict = {(row['category'], row['option_name']): row['value'] for idx, row in df_config.iterrows()}
-
-tile_rate = config_dict.get(("Tile", "1x1"), 5)
-pot_rate = config_dict.get(("Pot", "Standard"), 10)
-loading_rate = config_dict.get(("General", "LOADING"), 0.25)
-
 # --- Summary Data ---
-cursor.execute("SELECT SUM(labour_charges) FROM daily_log")
+cursor.execute("SELECT SUM(labour_charge) FROM daily_log")
 labour_charges = cursor.fetchone()[0] or 0.0
 
 cursor.execute("SELECT SUM(amount) FROM labour_payments")
@@ -35,109 +28,113 @@ material_balance = material_expense - material_paid
 total_expense = labour_charges + material_expense
 total_paid_all = total_paid + material_paid
 
-# ------------------- Card Template -------------------
-def card_box(title, items):
-    html = f"""
-    <div style="background-color:#f8f9fa; padding:20px; border-radius:15px;
-                box-shadow:0px 2px 8px rgba(0,0,0,0.1); margin:5px;">
-        <h4 style="margin-bottom:15px; text-align:center;">{title}</h4>
-    """
-    for label, value in items:
-        html += f"<p><b>{label}:</b> {value}</p>"
-    html += "</div>"
-    return html
-
-# ------------------- Dashboard Layout -------------------
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown(
-        card_box("👷 Labour Summary", [
-            ("Total Labour Charges", f"₹ {labour_charges:,.2f}"),
-            ("Paid to Labour", f"₹ {total_paid:,.2f}"),
-            ("Outstanding Balance", f"₹ {labour_balance:,.2f}")
-        ]),
-        unsafe_allow_html=True
-    )
-
-with col2:
-    st.markdown(
-        card_box("🧱 Material Summary", [
-            ("Material Expense", f"₹ {material_expense:,.2f}"),
-            ("Paid for Materials", f"₹ {material_paid:,.2f}"),
-            ("Outstanding Balance", f"₹ {material_balance:,.2f}")
-        ]),
-        unsafe_allow_html=True
-    )
-
-col3, col4 = st.columns(2)
-
-with col3:
-    st.markdown(
-        card_box("📦 Overall Summary", [
-            ("Total Expense", f"₹ {total_expense:,.2f}"),
-            ("Total Paid", f"₹ {total_paid_all:,.2f}")
-        ]),
-        unsafe_allow_html=True
-    )
-
-# ------------------- Tiles Production Breakdown -------------------
+# --- Tiles Data ---
 cursor.execute("""
-    SELECT item_name, SUM(quantity) as total_qty
+    SELECT tile_type, interlock_subtype, interlock_size, color, SUM(quantity) as total_qty
     FROM daily_log
-    WHERE date = CURRENT_DATE
-    AND (item_name LIKE 'Tile%' OR item_name LIKE 'Interlock%')
-    GROUP BY item_name
+    WHERE category = 'Tile'
+    GROUP BY tile_type, interlock_subtype, interlock_size, color
 """)
 tile_rows = cursor.fetchall()
+df_tiles = pd.DataFrame(tile_rows, columns=["Tile Type", "Subtype", "Size", "Color", "Quantity"])
+total_tiles_produced = df_tiles["Quantity"].sum() if not df_tiles.empty else 0
 
-total_tiles_produced = 0
-tile_1x1_qty = 0
-interlock_qty = {}
+cursor.execute("SELECT SUM(quantity), SUM(amount) FROM sale")
+tiles_sold_data = cursor.fetchone()
+total_tiles_sold = tiles_sold_data[0] or 0
+total_sales_amount = tiles_sold_data[1] or 0.0
 
-for item_name, qty in tile_rows:
-    total_tiles_produced += qty
-    name_upper = item_name.upper()
-    if "1X1" in name_upper:
-        tile_1x1_qty += qty
-    elif "INTERLOCK" in name_upper:
-        size = name_upper.replace("INTERLOCK", "").strip()
-        interlock_qty[size] = interlock_qty.get(size, 0) + qty
+# ------------------- KPI CARDS SINGLE LINE WITH ICONS -------------------
+def kpi_card(title, value, color, icon):
+    return f"""
+    <div style="
+        background-color:{color};
+        padding:12px;
+        border-radius:12px; 
+        text-align:center;
+        color:white;
+        font-size:13px;
+        font-weight:bold;
+        width:140px;  /* Reduced width to fit all cards in one line */
+        margin:5px;
+        box-shadow:0 2px 6px rgba(0,0,0,0.1);
+        flex-shrink:0;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        align-items:center;
+    ">
+        <div style="font-size:20px; margin-bottom:6px;">{icon}</div>
+        <h4 style="margin:0; font-size:12px; text-align:center; white-space:normal; word-wrap:break-word;">
+            {title}
+        </h4>
+        <p style="margin:0; font-size:14px; text-align:center; white-space:normal; word-wrap:break-word;">
+            {value}
+        </p>
+    </div>
+    """
 
-tile_items = [("Total Tiles Produced", total_tiles_produced),
-              ("1x1", tile_1x1_qty)]
-for size, qty in interlock_qty.items():
-    tile_items.append((f"Interlock {size}", qty))
+kpi1 = kpi_card("Total Expense", f"₹ {total_expense:,.2f}", "#6c757d", "💰")
+kpi2 = kpi_card("Total Paid", f"₹ {total_paid_all:,.2f}", "#198754", "✅")
+kpi3 = kpi_card("Tiles Produced", f"{total_tiles_produced:,}", "#0d6efd", "🧱")
+kpi4 = kpi_card("Tiles Sold", f"{total_tiles_sold:,}", "#ffc107", "📦")
+kpi5 = kpi_card("Sales Amount", f"₹ {total_sales_amount:,.2f}", "#dc3545", "💵")
 
-with col4:
-    st.markdown(card_box("🏭 Tiles Production Breakdown", tile_items), unsafe_allow_html=True)
+st.markdown(f"""
+    <div style="
+        display:flex; 
+        justify-content:center; 
+        flex-wrap:nowrap;  /* Keep all cards in single line */
+        gap:8px;
+    ">
+        {kpi1} {kpi2} {kpi3} {kpi4} {kpi5}
+    </div>
+""", unsafe_allow_html=True)
 
-# ------------------- Data Tables -------------------
+# ------------------- CHART -------------------
+if not df_tiles.empty:
+    st.subheader("📊 Tiles Production vs Sales")
+    df_chart = pd.DataFrame({
+        "Metric": ["Produced", "Sold"],
+        "Quantity": [total_tiles_produced, total_tiles_sold]
+    })
+    fig = px.bar(df_chart, x="Metric", y="Quantity", color="Metric", text="Quantity", title="Tiles Production vs Sales")
+    st.plotly_chart(fig, use_container_width=True)
+
+# ------------------- TILE DETAILS -------------------
+if not df_tiles.empty:
+    st.subheader("📋 Tile Production Details")
+    df_1x1 = df_tiles[df_tiles["Tile Type"] == "1x1"]
+    df_interlock = df_tiles[df_tiles["Tile Type"] != "1x1"]
+
+    if not df_1x1.empty:
+        with st.expander(f"1x1 Tiles (Total: {df_1x1['Quantity'].sum()})", expanded=True):
+            st.dataframe(df_1x1[["Color", "Quantity"]].sort_values("Quantity", ascending=False), use_container_width=True)
+
+    if not df_interlock.empty:
+        for subtype, df_sub in df_interlock.groupby("Subtype"):
+            with st.expander(f"{subtype} (Total: {df_sub['Quantity'].sum()})", expanded=False):
+                st.dataframe(df_sub[["Size", "Color", "Quantity"]].sort_values(["Size", "Color"]), use_container_width=True)
+
+# ------------------- DATA TABLES -------------------
 tab1, tab2, tab3 = st.tabs(["📋 Daily Log", "💵 Labour Payments", "🧾 Material Expenses"])
 
 with tab1:
     st.subheader("📋 Daily Log")
-    df_log = pd.read_sql("SELECT * FROM daily_log ORDER BY date DESC", conn)
-    if "id" in df_log.columns:
-        df_log = df_log.drop(columns=["id"])
-    df_log = df_log.rename(columns=str.upper)
-    st.dataframe(df_log, use_container_width=True)
+    df_log = pd.read_sql("SELECT * FROM daily_log ORDER BY log_date DESC", conn)
+    if "id" in df_log.columns: df_log = df_log.drop(columns=["id"])
+    st.dataframe(df_log.rename(columns=str.upper), use_container_width=True)
 
 with tab2:
     st.subheader("💵 Labour Payment History")
     df_payments = pd.read_sql("SELECT * FROM labour_payments ORDER BY date DESC", conn)
-    if "id" in df_payments.columns:
-        df_payments = df_payments.drop(columns=["id"])
-    df_payments = df_payments.rename(columns=str.upper)
-    st.dataframe(df_payments, use_container_width=True)
+    if "id" in df_payments.columns: df_payments = df_payments.drop(columns=["id"])
+    st.dataframe(df_payments.rename(columns=str.upper), use_container_width=True)
 
 with tab3:
     st.subheader("🧾 Material Expense Records")
     df_materials = pd.read_sql("SELECT * FROM materials ORDER BY date DESC", conn)
-    if "id" in df_materials.columns:
-        df_materials = df_materials.drop(columns=["id"])
-    df_materials = df_materials.rename(columns=str.upper)
-    st.dataframe(df_materials, use_container_width=True)
+    if "id" in df_materials.columns: df_materials = df_materials.drop(columns=["id"])
+    st.dataframe(df_materials.rename(columns=str.upper), use_container_width=True)
 
-# Close connection
 conn.close()

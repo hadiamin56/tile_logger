@@ -10,60 +10,41 @@ def get_conn():
 def init_db():
     conn = get_conn()
     cursor = conn.cursor()
-    
-    # Create daily_log table with item_name + quantity
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS daily_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT,
-        item_name TEXT,
-        quantity INTEGER,
-        labour_charges REAL
-    )
-    ''')
 
-    # Config table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS config (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL,      -- e.g. "Tile", "Interlock"
-    option_name TEXT NOT NULL,   -- e.g. "1x1", "2x2", "60mm", "80mm"
-    value REAL,
-    UNIQUE(category, option_name)
-)
-    ''')
+    # Drop daily_log if exists to avoid old structure conflicts
 
-    # Labour payments table
-    cursor.execute('''
+    # --- Labour payments table ---
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS labour_payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT,
         amount REAL,
         purpose TEXT
     )
-    ''')
+    """)
 
-    # Vendors table
-    cursor.execute('''
+    # --- Vendors table ---
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS vendors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         phone TEXT,
         details TEXT
     )
-    ''')
-    # Vendor-Materials table
-    cursor.execute('''
+    """)
+
+    # --- Vendor-Materials table ---
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS vendor_materials (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         vendor_id INTEGER,
         material_name TEXT,
         FOREIGN KEY(vendor_id) REFERENCES vendors(id)
     )
-    ''')
+    """)
 
-    # Materials Procurement table
-    cursor.execute('''
+    # --- Materials Procurement table ---
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS materials (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         date TEXT,
@@ -75,51 +56,62 @@ def init_db():
         vendor_id INTEGER,
         FOREIGN KEY(vendor_id) REFERENCES vendors(id)
     )
-    ''')
+    """)
 
-    
-    # Material payments table (linked to vendor_id)
-    cursor.execute('''
+    # --- Material payments table ---
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS material_payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         vendor_id INTEGER,
         date TEXT,
         amount REAL,
-        FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+        FOREIGN KEY(vendor_id) REFERENCES vendors(id)
     )
-    ''')
+    """)
 
-    # #sale
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS sale (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        customer_name TEXT,
-        customer_phone_number TEXT,
-        tile_type TEXT,
-        quantity INTEGER,
-        price_per_tile REAL,
-        amount REAL,
-        payment_mode TEXT,
-        date TEXT
-    )
-    ''')
-
-    # ---- Default config values ----
-    default_configs = [
-        ("General", "LOADING", 0.25),
-        ("Tile", "1x1", 25),
-        ("Tile", "2x2", 40),
-        ("Interlock", "60mm", 20),
-        ("Interlock", "80mm", 25),
-        ("Pot", "Standard", 10)
-    ]
-
-    for category, option, value in default_configs:
-        cursor.execute(
-            "INSERT OR IGNORE INTO config (category, option_name, value) VALUES (?, ?, ?)",
-            (category, option, value)
+    # --- Sale table ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sale (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id TEXT,
+            customer_name TEXT,
+            customer_phone_number TEXT,
+            tile_type TEXT,
+            quantity INTEGER,
+            price_per_tile REAL,
+            amount REAL,
+            payment_mode TEXT,
+            date TEXT
         )
+    """)
+
+    # Create daily_log table if not exists
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS daily_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category TEXT,
+        tile_type TEXT,
+        interlock_subtype TEXT,
+        interlock_size TEXT,
+        color TEXT,
+        quantity INTEGER,
+        labour_charge REAL,
+        log_date DATE
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS tile_stock (
+        tile_type TEXT,
+        interlock_subtype TEXT,
+        interlock_size TEXT,
+        color TEXT,
+        available_qty INTEGER,
+        PRIMARY KEY (tile_type, interlock_subtype, interlock_size, color)
+    )
+    """)
+
 
     conn.commit()
     conn.close()
-
+    print("✅ tiles.db initialized with all tables.")
